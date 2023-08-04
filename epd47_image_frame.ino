@@ -16,43 +16,19 @@
 #include <time.h>               // In-built
 
 #include "lang_ru.h"
-#include "dickbutt.h"
-#include "jimbo.h"
-#include "gradient.h"
 #include "graphics_engine.h"
 
 #define SCREEN_WIDTH   EPD_WIDTH //960
 #define SCREEN_HEIGHT  EPD_HEIGHT //540
 
-size_t framebuffer_size = EPD_WIDTH * EPD_HEIGHT / 2;
+const size_t framebuffer_size = EPD_WIDTH * EPD_HEIGHT / 2;
 
 WiFiClient wifi_client;   // wifi client object
 
-//################  VERSION  ##################################################
-String version = "2.5 / 4.7in";  // Programme version, see change log at end
-//################ VARIABLES ##################################################
-
-#define White         0xFF
-#define LightGrey     0xBB
-#define Grey          0x88
-#define DarkGrey      0x44
-#define Black         0x00
-
-#define autoscale_on  true
-#define autoscale_off false
-#define barchart_on   true
-#define barchart_off  false
-
-boolean LargeIcon   = true;
-boolean SmallIcon   = false;
-#define Large  20           // For icon drawing
-#define Small  8            // For icon drawing
 String  Time_str = "--:--:--";
 String  Date_str = "-- --- ----";
 int     wifi_signal, CurrentHour = 0, CurrentMin = 0, CurrentSec = 0, EventCnt = 0, vref = 1100;
 //################ PROGRAM VARIABLES and OBJECTS ##########################################
-
-
 
 long SleepDuration   = 60; // Sleep time in minutes, aligned to the nearest minute boundary, so if 30 will always update at 00 or 30 past the hour
 int  WakeupHour      = 8;  // Don't wakeup until after 07:00 to save battery power
@@ -181,16 +157,25 @@ void setup() {
   memset(framebuffer, 0xFF, framebuffer_size);
 
   InitialiseSystem();
-  if (StartWiFi() == WL_CONNECTED && SetupTime() == true) {
-    if (obtainWebData()) { // Only if received both Weather or Forecast proceed
-      StopWiFi();         // Reduces power consumption
-      epd_poweron();      // Switch on EPD display
-      epd_clear();        // Clear the screen
-      DisplayImage();   // Display the weather data
-      edp_update();       // Update the display to show the information
-      epd_poweroff_all(); // Switch off all power to EPD
-    }
+  if (StartWiFi() != WL_CONNECTED){
+    Serial.println("WiFi couldn't start");
+    goto sleep_begin;
   }
+  if (SetupTime() != true){
+    Serial.println("Couldn't setup time");
+    goto sleep_begin;
+  }
+  
+  if (obtainWebData()) { // Only if received both Weather or Forecast proceed
+    StopWiFi();         // Reduces power consumption
+    epd_poweron();      // Switch on EPD display
+    epd_clear();        // Clear the screen
+    DisplayImage();   // Display the weather data
+    edp_update();       // Update the display to show the information
+    epd_poweroff_all(); // Switch off all power to EPD
+  }
+
+sleep_begin:
   BeginSleep();
 }
 
@@ -199,59 +184,6 @@ void setup() {
 void DisplayImage() {                          // 4.7" e-paper display is 960x540 resolution
   // DisplayStatusSection(600, 20, wifi_signal);    // Wi-Fi signal strength and Battery voltage
   DrawWebResponce(100, 100);
-  // DrawDickButt(200, 200);
-  // DrawJimothy();
-  // DrawGradient();
-}
-
-void DrawGradient(){
-  Rect_t area = {
-        .x = 0,
-        .y = 0,
-        .width = gradient_width,
-        .height = gradient_height
-  };
-  epd_draw_grayscale_image(area, (uint8_t *)gradient_data);
-}
-
-void DrawJimothy(){
-  Rect_t area = {
-        .x = 0,
-        .y = 0,
-        .width = jimothy_width,
-        .height = jimothy_height
-  };
-  epd_draw_grayscale_image(area, (uint8_t *)jimothy_data);
-}
-  
-void DrawDickButt(int x, int y){
-  Rect_t area = {
-        .x = x,
-        .y = y,
-        .width = dickbutt_width,
-        .height = dickbutt_height
-    };
-    epd_draw_grayscale_image(area, (uint8_t *)dickbutt_data);
-}
-
-void DrawSegment(int x, int y, int o1, int o2, int o3, int o4, int o11, int o12, int o13, int o14) {
-  drawLine(x + o1,  y + o2,  x + o3,  y + o4,  Black);
-  drawLine(x + o11, y + o12, x + o13, y + o14, Black);
-}
-
-
-void DrawRSSI(int x, int y, int rssi) {
-  int WIFIsignal = 0;
-  int xpos = 1;
-  for (int _rssi = -100; _rssi <= rssi; _rssi = _rssi + 20) {
-    if (_rssi <= -20)  WIFIsignal = 30; //            <-20dbm displays 5-bars
-    if (_rssi <= -40)  WIFIsignal = 24; //  -40dbm to  -21dbm displays 4-bars
-    if (_rssi <= -60)  WIFIsignal = 18; //  -60dbm to  -41dbm displays 3-bars
-    if (_rssi <= -80)  WIFIsignal = 12; //  -80dbm to  -61dbm displays 2-bars
-    if (_rssi <= -100) WIFIsignal = 6;  // -100dbm to  -81dbm displays 1-bar
-    fillRect(x + xpos * 8, y - WIFIsignal, 6, WIFIsignal, Black);
-    xpos++;
-  }
 }
 
 boolean UpdateLocalTime() {
@@ -284,15 +216,20 @@ boolean UpdateLocalTime() {
 
 
 void DrawWebResponce(int x, int y) {
-  { // Only display if there is a valid reading
-    // Serial.println("Web response = " + web_string);
+  epd_draw_grayscale_image(epd_full_screen(), framebuffer);
+}
 
-    // drawRect(x + 25, y - 14, 40, 15, Black);
-    // fillRect(x + 65, y - 10, 4, 7, Black);
-    // fillRect(x + 27, y - 12, 36 * percentage / 100.0, 11, Black);
-    // drawString(x + 85, y - 14, web_string, LEFT);
-    epd_draw_grayscale_image(epd_full_screen(), framebuffer);
-
+void DrawRSSI(int x, int y, int rssi) {
+  int WIFIsignal = 0;
+  int xpos = 1;
+  for (int _rssi = -100; _rssi <= rssi; _rssi = _rssi + 20) {
+    if (_rssi <= -20)  WIFIsignal = 30; //            <-20dbm displays 5-bars
+    if (_rssi <= -40)  WIFIsignal = 24; //  -40dbm to  -21dbm displays 4-bars
+    if (_rssi <= -60)  WIFIsignal = 18; //  -60dbm to  -41dbm displays 3-bars
+    if (_rssi <= -80)  WIFIsignal = 12; //  -80dbm to  -61dbm displays 2-bars
+    if (_rssi <= -100) WIFIsignal = 6;  // -100dbm to  -81dbm displays 1-bar
+    fillRect(x + xpos * 8, y - WIFIsignal, 6, WIFIsignal, color_black);
+    xpos++;
   }
 }
 
@@ -310,9 +247,9 @@ void DrawBattery(int x, int y) {
     percentage = 2836.9625 * pow(voltage, 4) - 43987.4889 * pow(voltage, 3) + 255233.8134 * pow(voltage, 2) - 656689.7123 * voltage + 632041.7303;
     if (voltage >= 4.20) percentage = 100;
     if (voltage <= 3.20) percentage = 0;  // orig 3.5
-    drawRect(x + 25, y - 14, 40, 15, Black);
-    fillRect(x + 65, y - 10, 4, 7, Black);
-    fillRect(x + 27, y - 12, 36 * percentage / 100.0, 11, Black);
+    drawRect(x + 25, y - 14, 40, 15, color_black);
+    fillRect(x + 65, y - 10, 4, 7, color_black);
+    fillRect(x + 27, y - 12, 36 * percentage / 100.0, 11, color_black);
     drawString(x + 85, y - 14, String(percentage) + "%  " + String(voltage, 1) + "v", LEFT);
   }
 }
@@ -322,89 +259,3 @@ void DisplayStatusSection(int x, int y, int rssi) {
   DrawRSSI(x + 305, y + 15, rssi);
   DrawBattery(x + 150, y);
 }
-
-
-void Nodata(int x, int y, bool IconSize, String IconName) {
-  if (IconSize == LargeIcon) setFont(OpenSans24B); else setFont(OpenSans12B);
-  drawString(x - 3, y - 10, "?", CENTER);
-}
-
-/* (C) D L BIRD
-    This function will draw a graph on a ePaper/TFT/LCD display using data from an array containing data to be graphed.
-    The variable 'max_readings' determines the maximum number of data elements for each array. Call it with the following parametric data:
-    x_pos-the x axis top-left position of the graph
-    y_pos-the y-axis top-left position of the graph, e.g. 100, 200 would draw the graph 100 pixels along and 200 pixels down from the top-left of the screen
-    width-the width of the graph in pixels
-    height-height of the graph in pixels
-    Y1_Max-sets the scale of plotted data, for example 5000 would scale all data to a Y-axis of 5000 maximum
-    data_array1 is parsed by value, externally they can be called anything else, e.g. within the routine it is called data_array1, but externally could be temperature_readings
-    auto_scale-a logical value (TRUE or FALSE) that switches the Y-axis autoscale On or Off
-    barchart_on-a logical value (TRUE or FALSE) that switches the drawing mode between barhcart and line graph
-    barchart_colour-a sets the title and graph plotting colour
-    If called with Y!_Max value of 500 and the data never goes above 500, then autoscale will retain a 0-500 Y scale, if on, the scale increases/decreases to match the data.
-    auto_scale_margin, e.g. if set to 1000 then autoscale increments the scale by 1000 steps.
-*/
-void DrawGraph(int x_pos, int y_pos, int gwidth, int gheight, float Y1Min, float Y1Max, String title, float DataArray[], int readings, boolean auto_scale, boolean barchart_mode) {
-#define auto_scale_margin 0 // Sets the autoscale increment, so axis steps up fter a change of e.g. 3
-#define y_minor_axis 5      // 5 y-axis division markers
-  setFont(OpenSans10B);
-  int maxYscale = -10000;
-  int minYscale =  10000;
-  int last_x, last_y;
-  float x2, y2;
-  if (auto_scale == true) {
-    for (int i = 1; i < readings; i++ ) {
-      if (DataArray[i] >= maxYscale) maxYscale = DataArray[i];
-      if (DataArray[i] <= minYscale) minYscale = DataArray[i];
-    }
-    maxYscale = round(maxYscale + auto_scale_margin); // Auto scale the graph and round to the nearest value defined, default was Y1Max
-    Y1Max = round(maxYscale + 0.5);
-    if (minYscale != 0) minYscale = round(minYscale - auto_scale_margin); // Auto scale the graph and round to the nearest value defined, default was Y1Min
-    Y1Min = round(minYscale);
-  }
-  // Draw the graph
-  last_x = x_pos + 1;
-  last_y = y_pos + (Y1Max - constrain(DataArray[1], Y1Min, Y1Max)) / (Y1Max - Y1Min) * gheight;
-  drawRect(x_pos, y_pos, gwidth + 3, gheight + 2, Grey);
-  drawString(x_pos - 20 + gwidth / 2, y_pos - 28, title, CENTER);
-  for (int gx = 0; gx < readings; gx++) {
-    x2 = x_pos + gx * gwidth / (readings - 1) - 1 ; // max_readings is the global variable that sets the maximum data that can be plotted
-    y2 = y_pos + (Y1Max - constrain(DataArray[gx], Y1Min, Y1Max)) / (Y1Max - Y1Min) * gheight + 1;
-    if (barchart_mode) {
-      fillRect(last_x + 2, y2, (gwidth / readings) - 1, y_pos + gheight - y2 + 2, Black);
-    } else {
-      drawLine(last_x, last_y - 1, x2, y2 - 1, Black); // Two lines for hi-res display
-      drawLine(last_x, last_y, x2, y2, Black);
-    }
-    last_x = x2;
-    last_y = y2;
-  }
-  //Draw the Y-axis scale
-#define number_of_dashes 20
-  for (int spacing = 0; spacing <= y_minor_axis; spacing++) {
-    for (int j = 0; j < number_of_dashes; j++) { // Draw dashed graph grid lines
-      if (spacing < y_minor_axis) drawFastHLine((x_pos + 3 + j * gwidth / number_of_dashes), y_pos + (gheight * spacing / y_minor_axis), gwidth / (2 * number_of_dashes), Grey);
-    }
-    if ((Y1Max - (float)(Y1Max - Y1Min) / y_minor_axis * spacing) < 5 || title == TXT_PRESSURE_IN) {
-      drawString(x_pos - 10, y_pos + gheight * spacing / y_minor_axis - 5, String((Y1Max - (float)(Y1Max - Y1Min) / y_minor_axis * spacing + 0.01), 1), RIGHT);
-    }
-    else
-    {
-      if (Y1Min < 1 && Y1Max < 10) {
-        drawString(x_pos - 3, y_pos + gheight * spacing / y_minor_axis - 5, String((Y1Max - (float)(Y1Max - Y1Min) / y_minor_axis * spacing + 0.01), 1), RIGHT);
-      }
-      else {
-        drawString(x_pos - 7, y_pos + gheight * spacing / y_minor_axis - 5, String((Y1Max - (float)(Y1Max - Y1Min) / y_minor_axis * spacing + 0.01), 0), RIGHT);
-      }
-    }
-  }
-  for (int i = 0; i < 3; i++) {
-    drawString(20 + x_pos + gwidth / 3 * i, y_pos + gheight + 10, String(i) + "d", LEFT);
-    if (i < 2) drawFastVLine(x_pos + gwidth / 3 * i + gwidth / 3, y_pos, gheight, LightGrey);
-  }
-}
-
-
-/*
-   1085 lines of code 28-01-2021
-*/

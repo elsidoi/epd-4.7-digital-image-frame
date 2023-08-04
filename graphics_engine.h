@@ -1,5 +1,11 @@
 enum alignment {LEFT, RIGHT, CENTER};
 
+#define color_white         0xFF
+#define color_lightGrey     0xBB
+#define color_grey          0x88
+#define color_darkGrey      0x44
+#define color_black         0x00
+
 void graphics_init();
 
 void drawString(int x, int y, String text, alignment align);
